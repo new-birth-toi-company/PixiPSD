@@ -23,7 +23,7 @@ PSD Loader for PixiJS
     document.body.appendChild(app.canvas);
 
     // Load your PSD file
-    const psd = new PixiPSD("./path/to/file.psd")
+    const psd = PixiPSD.from("./path/to/file.psd")
 
     app.stage.addChild(psd.display);
     ```
