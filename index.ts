@@ -8,9 +8,9 @@
  * @license MIT
  */
 
-import Psd, { Node as PSDNode, Layer as PSDLayer, Group as PSDGroup } from "@webtoon/psd";
+import Psd, { Group as PSDGroup, Layer as PSDLayer } from "@webtoon/psd";
 import { NodeBase } from "@webtoon/psd/dist/classes/NodeBase";
-import { Assets, BufferResource, Container, Graphics, Mesh, MeshGeometry, Texture, TextureSource } from "pixi.js";
+import { Container, Mesh, MeshGeometry, Texture } from "pixi.js";
 class Observable<T> {
     private _value: T;
     observer?: ((input: T) => void) | null;
