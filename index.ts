@@ -8,8 +8,9 @@
  * @license MIT
  */
 
-import Psd, { Group as PSDGroup, Layer as PSDLayer } from "@webtoon/psd";
-import { NodeBase } from "@webtoon/psd/dist/classes/NodeBase";
+import Psd, { Node as PSDNode} from "@webtoon/psd";
+import { Group } from "@webtoon/psd/dist/classes/Group";
+import { Layer } from "@webtoon/psd/dist/classes/Layer";
 import { Container, Mesh, MeshGeometry, Texture } from "pixi.js";
 class Observable<T> {
     private _value: T;
@@ -88,61 +89,107 @@ class Point {
     }
 }
 
-type Node = {
-    original: NodeBase;
+type Node_type = {
+    original: PSDNode;
     display: Container;
-    readonly type: "Group" | "Layer";
+    type: "PSD" | "Group" | "Layer";
 
     name: string;
     opacity: number;
     zIndex: number;
     position: Point;
     children: Node[];
-    parent: null | Group;
+    parent: null | Node;
 }
 
-export class Layer implements Node {
-    original: PSDLayer;
-    display: Mesh;
+export class Node implements Node_type {
+    original: PSDNode;
+    display: Mesh | Container;
+    type: "PSD" | "Group" | "Layer";
+
     name: string;
-    geometry: MeshGeometry;
-    readonly type: "Layer" = "Layer";
-    children: never[] = [];
-    private _parent: Group;
+    geometry?: MeshGeometry;
+    children: Node[] = [];
+    private _parent?: Node;
     position: Point;
 
-    constructor(layer: PSDLayer, parent: Group) {
-        this.original = layer;
-        this.name = layer.name;
+    constructor(node: PSDNode, parent?: Node) {
+        this.original = node;
+        this.name = node.name;
+        if(node instanceof Layer){
+            this.type = "Layer";
 
-        const geometry = this.geometry = new MeshGeometry({
+            const geometry = this.geometry = new MeshGeometry({
 
-        })
+            })
+    
+            this.display = new Mesh({
+                geometry,
+            });
+    
+            this.init_texture();
+            
 
-        this.display = new Mesh({
-            geometry,
-        });
+            this.position = new Point(
+                node.top,
+                node.left,
+                (point)=>{
+                    this.display.position.x = point.x;
+                    this.display.position.y = point.y;
+                }
+            )
+        }else if(node instanceof Group){
+            this.type = "Group";
+            this.display = new Container();
+            node.children.forEach((child)=>{
+                const child_node = new Node(child, this)
+                this.children.push(child_node)
+                this.display.addChild(child_node.display)
+            });
+            
+            this.position = new Point(
+                0,
+                0,
+                (point)=>{
+                    this.display.position.x = point.x;
+                    this.display.position.y = point.y;
+                }
+            )
+        }else{
+            this.type = "PSD";
+            this.display = new Container();
+            node.children.forEach((child)=>{
+                this.children.push(new Node(child, this))
+            });
+            node.children.forEach((child)=>{
+                const child_node = new Node(child, this)
+                this.children.push(child_node)
+                this.display.addChild(child_node.display)
+            });
+            this.position = new Point(
+                0,
+                0,
+                (point)=>{
+                    this.display.position.x = point.x;
+                    this.display.position.y = point.y;
+                }
+            )
+        }
 
-        layer.composite().then(async (value)=>{
+        this._parent = parent;
+    }
+    
+    async init_texture(){
+        if(this.display instanceof Mesh && this.original instanceof Layer){
+            const value = await this.original.composite()
             const texture = Texture.from({
                 "resource": value.buffer,
-                "height": layer.height,
-                "width": layer.width,
+                "height": this.original.height,
+                "width": this.original.width,
             })
             this.display.texture = texture;
-        })
-
-        this._parent = parent;
-        this.position = new Point(
-            layer.top,
-            layer.left,
-            (point)=>{
-                this.display.position.x = point.x;
-                this.display.position.y = point.y;
-            }
-        )
+        }
     }
-    
 
     get opacity(): number {
         return this.display.alpha;
@@ -156,111 +203,21 @@ export class Layer implements Node {
     set zIndex(x: number) {
         this.display.zIndex = x;
     }
-    get parent(): Group {
-        return this._parent;
+    get parent(): Node | null {
+        return this._parent ?? null;
     }
-    set parent(parent: Group) {
+    set parent(parent: Node) {
         this.display.parent = parent.display;
         this._parent = parent;
     }
 }
 
-export class Group implements Node {
-    original: PSDGroup;
-    display: Container;
-    name: string;
-    readonly type: "Group" = "Group";
-    children: Node[] = [];
-    private _parent: Group;
-    position: Point;
-
-    constructor(group: PSDGroup, parent: Group) {
-        this.original = group;
-        this.name = group.name;
-
-        this.display = new Container();
-
-        this._parent = parent;
-
-    
-        this.position = new Point(
-            0,
-            0,
-            (point)=>{
-                this.display.position.x = point.x;
-                this.display.position.y = point.y;
-            }
-        )
-
-        this.children = group.children.map((child)=>{
-            if (child.type === "Group") {
-                return new Group(child, this);
-            }else{
-                return new Layer(child, this);
-            }
-        });
-    }
-    
-
-    get opacity(): number {
-        return this.display.alpha;
-    }
-    set opacity(x: number) {
-        this.display.alpha = x;
-    }
-    get zIndex(): number {
-        return this.display.zIndex;
-    }
-    set zIndex(x: number) {
-        this.display.zIndex = x;
-    }
-    get parent(): Group {
-        return this._parent;
-    }
-    set parent(parent: Group) {
-        this.display.parent = parent.display;
-        this._parent = parent;
-    }
-}
-
-export class PixiPSD implements Node {
-    original: Psd;
-    display: Container;
-    readonly type: "Group" = "Group";
-
-    name: string;
-    children: Node[] = [];
-    parent: null = null;
-    position: Point;
+export class PixiPSD extends Node implements Node {
+    readonly type: "PSD" = "PSD";
 
     constructor(buffer: ArrayBuffer) {
-        this.original = Psd.parse(buffer);
-
-        this.display = new Container();
-
-        this.name = this.original.name;
-
-        this.position = new Point(
-            0,
-            0,
-            (point)=>{
-                this.display.position.x = point.x;
-                this.display.position.y = point.y;
-            }
-        )
-    }
-
-    get opacity(): number {
-        return this.display.alpha;
-    }
-    set opacity(x: number) {
-        this.display.alpha = x;
-    }
-    get zIndex(): number {
-        return this.display.zIndex;
-    }
-    set zIndex(x: number) {
-        this.display.zIndex = x;
+        const original = Psd.parse(buffer);
+        super(original)
     }
 
     static async from(url: string): Promise<PixiPSD> {
