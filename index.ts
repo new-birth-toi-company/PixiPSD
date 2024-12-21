@@ -2,7 +2,7 @@
  * @module PixiPSD
  * 
  * @version v0.0.1
- * @author New Birth Toi Company Animation&Technology department
+ * @author Toi Company Studio Animation&Technology department
  * @description PSD Loader for PixiJS.
  * @see https://github.com/new-birth-toi-company/PixiPSD/
  * @license MIT
