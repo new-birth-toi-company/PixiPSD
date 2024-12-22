@@ -12,11 +12,11 @@ import { Psd, Layer, readPsd } from "ag-psd";
 import { Container, Mesh, MeshGeometry, Texture } from "pixi.js";
 class Observable<T> {
     private _value: T;
-    observer?: ((input: T) => void) | null;
+    onChange?: ((input: T) => void) | null;
 
-    constructor(initialValue: T, observer?: (input: T) => void) {
+    constructor(initialValue: T, onChange?: (input: T) => void) {
         this._value = initialValue;
-        this.observer = observer;
+        this.onChange = onChange;
     }
 
     get value(): T {
@@ -26,8 +26,8 @@ class Observable<T> {
     set value(newValue: T) {
         if (this._value !== newValue) {
             this._value = newValue;
-            if (this.observer) {
-                this.observer(newValue);
+            if (this.onChange) {
+                this.onChange(newValue);
             }
         }
     }
@@ -36,31 +36,28 @@ class Observable<T> {
 class Point {
     _x: Observable<number>;
     _y: Observable<number>;
-    observer?: (input: Point) => void;
+    onChange?: (input: Point) => void;
 
     constructor(
         x: number = 0,
         y: number = 0,
-        observer?: (input: Point) => void,
+        onChange?: (input: Point) => void,
     ) {
         this._x = new Observable(x);
         this._y = new Observable(y);
-        this.observer = observer;
-
-        const wrappedObserver = (input: { x: number; y: number }) => {
-            if (this.observer) {
-                const tmp = new Point();
-                tmp.xy = [input.x, input.y];
-                this.observer(tmp);
-            }
-        };
-        this._x.observer = (observe_x) =>
-            wrappedObserver({ x: observe_x, y: this._y.value });
-        this._y.observer = (observe_y) =>
-            wrappedObserver({ x: this._x.value, y: observe_y });
+        this.onChange = onChange;
+        
+        this._x.onChange = () => this.updatePoint()
+        this._y.onChange = () => this.updatePoint()
 
         this.xy = [x, y];
     }
+
+    private updatePoint(): void {
+        if (this.onChange) {
+           this.onChange(this);
+       }
+   }
 
     get x(): number {
         return this._x.value;
@@ -101,6 +98,8 @@ export class Node {
     constructor(node: Psd | Layer, parent?: Node) {
         this.original = node;
         this.name = node.name ?? "Unnamed Node";
+
+
         if (node.children?.length) {
             this._type = "Group";
 
@@ -135,8 +134,14 @@ export class Node {
                 this.display.position.x = point.x;
                 this.display.position.y = point.y;
             }
-        )
-
+        );
+        const clipping = 'clipping' in node ? node.clipping : null;
+        if (clipping) {
+            if(parent?.children[parent.children.length - 1]?.display){
+                this.display.mask = parent?.children[parent.children.length - 1]?.display;
+            }
+        }
+        
         this._parent = parent;
     }
 
@@ -157,6 +162,7 @@ export class Node {
     }
     set opacity(x: number) {
         this.display.alpha = x;
+        this.original.fillOpacity = x;
     }
     get zIndex(): number {
         return this.display.zIndex;
@@ -171,14 +177,12 @@ export class Node {
         this.display.parent = parent.display;
         this._parent = parent;
     }
-
     get visible(): boolean {
         return this.display.visible;
     }
     set visible(x: boolean) {
         this.display.visible = x;
     }
-
     get type(): "PSD" | "Group" | "Layer" {
         return this._type;
     }
