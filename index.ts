@@ -8,9 +8,7 @@
  * @license MIT
  */
 
-import Psd, { Node as PSDNode} from "@webtoon/psd";
-import { Group } from "@webtoon/psd/dist/classes/Group";
-import { Layer } from "@webtoon/psd/dist/classes/Layer";
+import { Psd, Layer, readPsd } from "ag-psd";
 import { Container, Mesh, MeshGeometry, Texture } from "pixi.js";
 class Observable<T> {
     private _value: T;
@@ -90,7 +88,7 @@ class Point {
 }
 
 type Node_type = {
-    original: PSDNode;
+    original: Psd | Layer;
     display: Container;
     type: "PSD" | "Group" | "Layer";
 
@@ -103,7 +101,7 @@ type Node_type = {
 }
 
 export class Node implements Node_type {
-    original: PSDNode;
+    original: Layer;
     display: Mesh | Container;
     type: "PSD" | "Group" | "Layer";
 
@@ -113,79 +111,53 @@ export class Node implements Node_type {
     private _parent?: Node;
     position: Point;
 
-    constructor(node: PSDNode, parent?: Node) {
+    constructor(node: Layer, parent?: Node) {
         this.original = node;
-        this.name = node.name;
-        if(node instanceof Layer){
+        this.name = node.name ?? "Unnamed Node";
+        if (node.children?.length) {
+            this.type = "Group";
+
+            this.display = new Container();
+
+            node.children.forEach((child) => {
+                const child_node = new Node(child, this)
+                this.children.push(child_node)
+                this.display.addChild(child_node.display)
+            });
+        } else {
             this.type = "Layer";
 
             const geometry = this.geometry = new MeshGeometry({
 
             })
-    
+
             this.display = new Mesh({
                 geometry,
             });
-    
-            this.init_texture();
-            
 
-            this.position = new Point(
-                node.top,
-                node.left,
-                (point)=>{
-                    this.display.position.x = point.x;
-                    this.display.position.y = point.y;
-                }
-            )
-        }else if(node instanceof Group){
-            this.type = "Group";
-            this.display = new Container();
-            node.children.forEach((child)=>{
-                const child_node = new Node(child, this)
-                this.children.push(child_node)
-                this.display.addChild(child_node.display)
-            });
-            
-            this.position = new Point(
-                0,
-                0,
-                (point)=>{
-                    this.display.position.x = point.x;
-                    this.display.position.y = point.y;
-                }
-            )
-        }else{
-            this.type = "PSD";
-            this.display = new Container();
-            node.children.forEach((child)=>{
-                this.children.push(new Node(child, this))
-            });
-            node.children.forEach((child)=>{
-                const child_node = new Node(child, this)
-                this.children.push(child_node)
-                this.display.addChild(child_node.display)
-            });
-            this.position = new Point(
-                0,
-                0,
-                (point)=>{
-                    this.display.position.x = point.x;
-                    this.display.position.y = point.y;
-                }
-            )
+            this.init_texture();
         }
+
+
+        this.position = new Point(
+            node.top,
+            node.left,
+            (point) => {
+                this.display.position.x = point.x;
+                this.display.position.y = point.y;
+            }
+        )
 
         this._parent = parent;
     }
-    
-    async init_texture(){
-        if(this.display instanceof Mesh && this.original instanceof Layer){
-            const value = await this.original.composite()
+
+    async init_texture() {
+        if (this.display instanceof Mesh && this.original.imageData) {
+            const value = this.original.imageData.data;
             const texture = Texture.from({
                 "resource": value.buffer,
-                "height": this.original.height,
-                "width": this.original.width,
+                "height": this.original.imageData.height,
+                "width": this.original.imageData.width,
             })
             this.display.texture = texture;
         }
@@ -216,13 +188,13 @@ export class PixiPSD extends Node implements Node {
     readonly type: "PSD" = "PSD";
 
     constructor(buffer: ArrayBuffer) {
-        const original = Psd.parse(buffer);
+        const original = readPsd(buffer);
         super(original)
     }
 
     static async from(url: string): Promise<PixiPSD> {
         const response = await fetch(url)
-        if(response.body){
+        if (response.body) {
             const result = await response.body.getReader().read()
             if (result.value) {
                 return new PixiPSD(result.value.buffer);

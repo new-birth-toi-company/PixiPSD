@@ -22,7 +22,6 @@
   },
   "homepage": "https://github.com/new-birth-toi-company/PixiPSD#readme",
   "dependencies": {
-    "@webtoon/psd": "^0.4.0",
     "ag-psd": "^22.0.2",
     "pixi.js": "^8.6.5"
   }
