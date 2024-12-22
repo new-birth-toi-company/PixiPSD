@@ -71,7 +71,7 @@ class Point {
     }
 
     get y(): number {
-        return this._x.value;
+        return this._y.value;
     }
     set y(value: number) {
         this._y.value = value;
@@ -101,7 +101,7 @@ type Node_type = {
 }
 
 export class Node implements Node_type {
-    original: Layer;
+    original: Psd | Layer;
     display: Mesh | Container;
     type: "PSD" | "Group" | "Layer";
 
@@ -111,7 +111,7 @@ export class Node implements Node_type {
     private _parent?: Node;
     position: Point;
 
-    constructor(node: Layer, parent?: Node) {
+    constructor(node: Psd | Layer, parent?: Node) {
         this.original = node;
         this.name = node.name ?? "Unnamed Node";
         if (node.children?.length) {
@@ -132,16 +132,18 @@ export class Node implements Node_type {
             })
 
             this.display = new Mesh({
-                geometry,
+                geometry
             });
 
             this.init_texture();
         }
 
+        const top = 'top' in node ? node.top : 0;
+        const left = 'left' in node ? node.left : 0;
 
         this.position = new Point(
-            node.top,
-            node.left,
+            top,
+            left,
             (point) => {
                 this.display.position.x = point.x;
                 this.display.position.y = point.y;
@@ -188,7 +190,7 @@ export class PixiPSD extends Node implements Node {
     readonly type: "PSD" = "PSD";
 
     constructor(buffer: ArrayBuffer) {
-        const original = readPsd(buffer);
+        const original = readPsd(buffer) as Psd;
         super(original)
     }
 
