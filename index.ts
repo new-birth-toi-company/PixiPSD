@@ -87,35 +87,22 @@ class Point {
     }
 }
 
-type Node_type = {
-    original: Psd | Layer;
-    display: Container;
-    type: "PSD" | "Group" | "Layer";
-
-    name: string;
-    opacity: number;
-    zIndex: number;
-    position: Point;
-    children: Node[];
-    parent: null | Node;
-}
-
-export class Node implements Node_type {
+export class Node {
     original: Psd | Layer;
     display: Mesh | Container;
-    type: "PSD" | "Group" | "Layer";
+    private _type: "PSD" | "Group" | "Layer";
 
     name: string;
     geometry?: MeshGeometry;
     children: Node[] = [];
-    private _parent?: Node;
     position: Point;
+    private _parent?: Node;
 
     constructor(node: Psd | Layer, parent?: Node) {
         this.original = node;
         this.name = node.name ?? "Unnamed Node";
         if (node.children?.length) {
-            this.type = "Group";
+            this._type = "Group";
 
             this.display = new Container();
 
@@ -125,7 +112,7 @@ export class Node implements Node_type {
                 this.display.addChild(child_node.display)
             });
         } else {
-            this.type = "Layer";
+            this._type = "Layer";
 
             const geometry = this.geometry = new MeshGeometry({
 
@@ -184,13 +171,54 @@ export class Node implements Node_type {
         this.display.parent = parent.display;
         this._parent = parent;
     }
+
+    get visible(): boolean {
+        return this.display.visible;
+    }
+    set visible(x: boolean) {
+        this.display.visible = x;
+    }
+
+    get type(): "PSD" | "Group" | "Layer" {
+        return this._type;
+    }
+
+    set type(x: "Group" | "Layer") {
+        this._type = x;
+        this.children = [];
+        if (x === "Group") {
+            this.display = new Container();
+
+            this.original.children?.forEach((child) => {
+                const child_node = new Node(child, this)
+                this.children.push(child_node)
+                this.display.addChild(child_node.display)
+            });
+        } else {
+            const geometry = this.geometry = new MeshGeometry({
+
+            })
+
+            this.display = new Mesh({
+                geometry
+            });
+
+            if(this._parent) {
+                this._parent.display.addChild(this.display);
+            }
+
+            this.init_texture();
+        }
+    }
 }
 
-export class PixiPSD extends Node implements Node {
-    readonly type: "PSD" = "PSD";
+export class PixiPSD extends Node {
+    override get type(): "PSD" {
+        return "PSD";
+    }
 
     constructor(buffer: ArrayBuffer) {
-        const original = readPsd(buffer) as Psd;
+        const original = readPsd(buffer);
         super(original)
     }
 
