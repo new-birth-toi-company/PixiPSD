@@ -10,6 +10,69 @@
 
 import { Psd, Layer, readPsd } from "ag-psd";
 import { Container, Mesh, MeshGeometry, Texture } from "pixi.js";
+
+type blendMode_map_type = {
+    "pass through": "inherit",
+    "normal": "normal",
+    "dissolve": "normal",
+    "darken": "darken",
+    "multiply": "multiply",
+    "color burn": "color-burn",
+    "linear burn": "linear-burn",
+    "darker color": "normal",
+    "lighten": "lighten",
+    "screen": "screen",
+    "color dodge": "color-dodge",
+    "linear dodge": "linear-dodge",
+    "lighter color": "normal",
+    "overlay": "overlay",
+    "soft light": "soft-light",
+    "hard light": "hard-light",
+    "vivid light": "vivid-light",
+    "linear light": "linear-light",
+    "pin light": "pin-light",
+    "hard mix": "hard-mix",
+    "difference": "difference",
+    "exclusion": "exclusion",
+    "subtract": "subtract",
+    "divide": "divide",
+    "hue": "normal",
+    "saturation": "saturation",
+    "color": "color",
+    "luminosity": "luminosity"
+}
+
+const blendMode_map:blendMode_map_type = {
+    "pass through": "inherit",
+    "normal": "normal",
+    "dissolve": "normal",
+    "darken": "darken",
+    "multiply": "multiply",
+    "color burn": "color-burn",
+    "linear burn": "linear-burn",
+    "darker color": "normal",
+    "lighten": "lighten",
+    "screen": "screen",
+    "color dodge": "color-dodge",
+    "linear dodge": "linear-dodge",
+    "lighter color": "normal",
+    "overlay": "overlay",
+    "soft light": "soft-light",
+    "hard light": "hard-light",
+    "vivid light": "vivid-light",
+    "linear light": "linear-light",
+    "pin light": "pin-light",
+    "hard mix": "hard-mix",
+    "difference": "difference",
+    "exclusion": "exclusion",
+    "subtract": "subtract",
+    "divide": "divide",
+    "hue": "normal",
+    "saturation": "saturation",
+    "color": "color",
+    "luminosity": "luminosity"
+}
+
 class Observable<T> {
     private _value: T;
     onChange?: ((input: T) => void) | null;
@@ -135,11 +198,19 @@ export class Node {
                 this.display.position.y = point.y;
             }
         );
+        
         const clipping = 'clipping' in node ? node.clipping : null;
+
         if (clipping) {
             if(parent?.children[parent.children.length - 1]?.display){
                 this.display.mask = parent?.children[parent.children.length - 1]?.display;
             }
+        }
+        
+        const blendMode = 'blendMode' in node ? node.blendMode : null;
+
+        if (blendMode){
+            this.display.blendMode = blendMode_map[blendMode];
         }
         
         this._parent = parent;
