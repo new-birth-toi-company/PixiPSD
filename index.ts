@@ -9,7 +9,7 @@
  */
 
 import { Psd, Layer, readPsd } from "ag-psd";
-import { Container, Mesh, MeshGeometry, Texture } from "pixi.js";
+import { Container, Mesh, MeshGeometry, Text, Texture } from "pixi.js";
 
 type blendMode_map_type = {
     "pass through": "inherit",
@@ -42,7 +42,7 @@ type blendMode_map_type = {
     "luminosity": "luminosity"
 }
 
-const blendMode_map:blendMode_map_type = {
+const blendMode_map: blendMode_map_type = {
     "pass through": "inherit",
     "normal": "normal",
     "dissolve": "normal",
@@ -109,7 +109,7 @@ class Point {
         this._x = new Observable(x);
         this._y = new Observable(y);
         this.onChange = onChange;
-        
+
         this._x.onChange = () => this.updatePoint()
         this._y.onChange = () => this.updatePoint()
 
@@ -118,9 +118,9 @@ class Point {
 
     private updatePoint(): void {
         if (this.onChange) {
-           this.onChange(this);
-       }
-   }
+            this.onChange(this);
+        }
+    }
 
     get x(): number {
         return this._x.value;
@@ -151,8 +151,7 @@ export class Node {
     original: Psd | Layer;
     display: Mesh | Container;
     private _type: "PSD" | "Group" | "Layer";
-
-    name: string;
+    private _name: string = "";
     geometry?: MeshGeometry;
     children: Node[] = [];
     position: Point;
@@ -175,16 +174,29 @@ export class Node {
             });
         } else {
             this._type = "Layer";
+            if (node.text){
+                this.display = new Text({
+                    text: node.text.text,
+                    style: {
+                        fill: node.text.style?.fillColor as {"r": number, "g": number, "b": number, "a": number}| undefined,
+                        fontFamily: node.text.style?.font?.name,
+                        fontSize: node.text.style?.fontSize,
+                        stroke: {
+                            color: node.text.style?.strokeColor as {"r": number, "g": number, "b": number, "a": number} | undefined,
+                        }
+                    }
+                })
+            }else{
+                const geometry = this.geometry = new MeshGeometry({
 
-            const geometry = this.geometry = new MeshGeometry({
-
-            })
-
-            this.display = new Mesh({
-                geometry
-            });
-
-            this.init_texture();
+                })
+    
+                this.display = new Mesh({
+                    geometry
+                });
+    
+                this.init_texture();
+            }
         }
 
         const top = 'top' in node ? node.top : 0;
@@ -198,21 +210,21 @@ export class Node {
                 this.display.position.y = point.y;
             }
         );
-        
+
         const clipping = 'clipping' in node ? node.clipping : null;
 
         if (clipping) {
-            if(parent?.children[parent.children.length - 1]?.display){
+            if (parent?.children[parent.children.length - 1]?.display) {
                 this.display.mask = parent?.children[parent.children.length - 1]?.display;
             }
         }
-        
+
         const blendMode = 'blendMode' in node ? node.blendMode : null;
 
-        if (blendMode){
+        if (blendMode) {
             this.display.blendMode = blendMode_map[blendMode];
         }
-        
+
         this._parent = parent;
     }
 
@@ -226,6 +238,23 @@ export class Node {
             })
             this.display.texture = texture;
         }
+    }
+
+    get name(): string {
+        return this._name;
+    }
+    set name(x: string) {
+        this._name = x;
+        this.display.label = x;
+        this.original.name = x;
+    }
+
+    set knockout(x: boolean) {
+        console.warn("Knockout is not supported by PixiJS. This property will be ignored.");
+        this.original.knockout = x;
+    }
+    get knockout(): boolean {
+        return this.original.knockout ?? false;
     }
 
     get opacity(): number {
@@ -253,6 +282,11 @@ export class Node {
     }
     set visible(x: boolean) {
         this.display.visible = x;
+        if ("hidden" in this.original) {
+            this.original.hidden = !x;
+        }else{
+            this.original.layerMaskAsGlobalMask
+        }
     }
     get type(): "PSD" | "Group" | "Layer" {
         return this._type;
@@ -278,7 +312,7 @@ export class Node {
                 geometry
             });
 
-            if(this._parent) {
+            if (this._parent) {
                 this._parent.display.addChild(this.display);
             }
 
