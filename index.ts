@@ -9,7 +9,7 @@
  */
 
 import { Psd, Layer, readPsd } from "ag-psd";
-import { Container, Mesh, MeshGeometry, Text, Texture } from "pixi.js";
+import { Container, Graphics, Mesh, MeshGeometry, Text, Texture } from "pixi.js";
 
 type blendMode_map_type = {
     "pass through": "inherit",
@@ -147,12 +147,59 @@ export class Point {
     }
 }
 
+class NodeGeometryData {
+    vertices: Float32Array;
+    uvs: Float32Array;
+    indices: Uint32Array;
+    geometry: MeshGeometry;
+
+    constructor(geometry: MeshGeometry) {
+        this.vertices = new Float32Array([]);
+        this.uvs = new Float32Array([]);
+        this.indices = new Uint32Array([]);
+        this.geometry = geometry;
+    }
+
+    add_vertex(x: number, y: number) {
+        this.vertices.set([x, y], this.vertices.length);
+        this.indices.set([this.vertices.length / 2 - 1], this.indices.length);
+
+        this.update()
+    }
+
+    remove_vertex(index: number) {
+        const verticesArray = Array.from(this.vertices);
+        verticesArray.splice(index * 2, 2);
+        this.vertices = new Float32Array(verticesArray);
+
+        const indicesArray = Array.from(this.indices);
+        indicesArray.splice(index, 1);
+        this.indices = new Uint32Array(indicesArray);
+
+        this.update()
+    }
+
+    edit_vertex(index: number, x: number, y: number) {
+        this.vertices[index * 2] = x;
+        this.vertices[index * 2 + 1] = y;
+
+        this.update()
+    }
+
+    update() {
+        this.geometry.positions = this.vertices;
+        this.geometry.uvs = this.uvs;
+        this.geometry.indices = this.indices;
+    }
+}
+
 export class Node {
     original: Psd | Layer;
     display: Mesh | Container;
     private _type: "PSD" | "Group" | "Layer";
     private _name: string = "";
     geometry?: MeshGeometry;
+    geometryData?: NodeGeometryData;
     children: Node[] = [];
     position: Point;
     private _parent?: Node;
@@ -174,22 +221,24 @@ export class Node {
             });
         } else {
             this._type = "Layer";
-            if (node.text){
+            if (node.text) {
                 this.display = new Text({
                     text: node.text.text,
                     style: {
-                        fill: node.text.style?.fillColor as {"r": number, "g": number, "b": number, "a": number}| undefined,
+                        fill: node.text.style?.fillColor as { "r": number, "g": number, "b": number, "a": number } | undefined,
                         fontFamily: node.text.style?.font?.name,
                         fontSize: node.text.style?.fontSize,
                         stroke: {
-                            color: node.text.style?.strokeColor as {"r": number, "g": number, "b": number, "a": number} | undefined,
+                            color: node.text.style?.strokeColor as { "r": number, "g": number, "b": number, "a": number } | undefined,
                         }
                     }
                 })
-            }else{
+            } else {
                 const geometry = this.geometry = new MeshGeometry({
 
                 })
+
+                this.geometryData = new NodeGeometryData(geometry);
 
                 this.display = new Mesh({
                     geometry
@@ -240,6 +289,37 @@ export class Node {
         }
     }
 
+    async show_vertex() {
+        if (this.display instanceof Mesh) {
+            const geometry = this.display.geometry as MeshGeometry;
+            const vertices = geometry.getBuffer("aVertexPosition").data as Float32Array;
+            const indices = geometry.getIndex().data as Uint16Array;
+            const vertex = new Container();
+
+            const g = new Graphics();
+
+            g.x = this.display.x;
+            g.y = this.display.y;
+
+            g.clear();
+            const x = vertices[0];
+            const y = vertices[1];
+            g.moveTo(x, y);
+
+            for (let i = 0; i < vertices.length; i += 2) {
+                g.lineTo(vertices[i], vertices[i + 1]);
+                g.stroke({ width: 2, color: 0xffc2c2 });
+            }
+
+            for (let i = 0; i < vertices.length; i += 2) {
+                g.circle(vertices[i], vertices[i + 1], 10);
+                g.fill({ color: 0xff0022 });
+                g.stroke({ width: 2, color: 0xffc2c2 });
+            }
+            this.display.addChild(vertex);
+        }
+    }
+
     get name(): string {
         return this._name;
     }
@@ -284,7 +364,7 @@ export class Node {
         this.display.visible = x;
         if ("hidden" in this.original) {
             this.original.hidden = !x;
-        }else{
+        } else {
             this.original.layerMaskAsGlobalMask
         }
     }
