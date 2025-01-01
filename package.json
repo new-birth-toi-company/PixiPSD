@@ -4,7 +4,8 @@
   "description": "PSD Loader for PixiJS",
   "main": "index.js",
   "scripts": {
-    "test": "cross-env TS_NODE_COMPILER_OPTIONS=\"{ \\\"module\\\":\\\"commonjs\\\"}\" && nyc mocha -r ts-node/register \"tests/*.ts\""
+    "test": "cross-env TS_NODE_COMPILER_OPTIONS=\"{ \\\"module\\\":\\\"commonjs\\\"}\" && nyc mocha -r ts-node/register \"tests/*.ts\"",
+    "coverage": "nyc --reporter=lcovonly npm run test"
   },
   "repository": {
     "type": "git",
