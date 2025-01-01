@@ -3,7 +3,7 @@ import assert from 'assert';
 
 import { Psd, Layer } from "ag-psd";
 import { Container, Text, Mesh, MeshGeometry } from "pixi.js";
-import { Node } from "../index";
+import { Node } from "../";
 
 describe("Node constructor", () => {
     it("should initialize a Node with type 'Group' when children are present", () => {

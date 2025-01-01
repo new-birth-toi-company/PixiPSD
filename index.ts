@@ -106,8 +106,8 @@ export class Point {
         y: number = 0,
         onChange?: (input: Point) => void,
     ) {
-        this._x = new Observable(x);
-        this._y = new Observable(y);
+        this._x = new Observable(0);
+        this._y = new Observable(0);
         this.onChange = onChange;
 
         this._x.onChange = () => this.updatePoint()
@@ -325,7 +325,7 @@ export class Node {
     }
     set name(x: string) {
         this._name = x;
-        this.display.label = x;
+        // this.display.label = x;
         this.original.name = x;
     }
 
