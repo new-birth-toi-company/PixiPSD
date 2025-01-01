@@ -3,3 +3,4 @@ node_modules/
 jspm_packages/
 
 .vscode/
+.nyc_output/
