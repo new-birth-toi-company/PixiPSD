@@ -23,6 +23,6 @@
   "homepage": "https://github.com/new-birth-toi-company/PixiPSD#readme",
   "dependencies": {
     "ag-psd": "^22.0.2",
-    "pixi.js": "^8.6.5"
+    "pixi.js": "^8.6.6"
   }
 }

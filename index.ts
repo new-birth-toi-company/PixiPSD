@@ -1,6 +1,6 @@
 /**!
  * @module PixiPSD
- * 
+ *
  * @version v0.0.1
  * @author Toi Company Studio Animation&Technology department
  * @description PSD Loader for PixiJS.
@@ -73,7 +73,7 @@ const blendMode_map: blendMode_map_type = {
     "luminosity": "luminosity"
 }
 
-class Observable<T> {
+export class Observable<T> {
     private _value: T;
     onChange?: ((input: T) => void) | null;
 
@@ -96,7 +96,7 @@ class Observable<T> {
     }
 }
 
-class Point {
+export class Point {
     _x: Observable<number>;
     _y: Observable<number>;
     onChange?: (input: Point) => void;
@@ -190,11 +190,11 @@ export class Node {
                 const geometry = this.geometry = new MeshGeometry({
 
                 })
-    
+
                 this.display = new Mesh({
                     geometry
                 });
-    
+
                 this.init_texture();
             }
         }
@@ -321,7 +321,8 @@ export class Node {
     }
 }
 
-export class PixiPSD extends Node {
+export class PixiPSD<T extends Node = Node> extends Node {
+    override children!: T[];
     override get type(): "PSD" {
         return "PSD";
     }
