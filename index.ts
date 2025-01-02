@@ -8,70 +8,53 @@
  * @license MIT
  */
 
-import { Psd, Layer, readPsd } from "ag-psd";
-import { Container, Graphics, Mesh, MeshGeometry, Text, Texture } from "pixi.js";
+import { Psd, Layer, readPsd, BlendMode as PSDBlendMode, LayerMaskData } from "ag-psd";
+import { flushCompileCache } from "module";
+import {
+    Container,
+    Mesh,
+    MeshGeometry,
+    ObservablePoint,
+    Texture,
+    PointData,
+    DestroyOptions,
+    BLEND_MODES as PixiBlendMode
+} from "pixi.js";
 
 type blendMode_map_type = {
-    "pass through": "inherit",
-    "normal": "normal",
-    "dissolve": "normal",
-    "darken": "darken",
-    "multiply": "multiply",
-    "color burn": "color-burn",
-    "linear burn": "linear-burn",
-    "darker color": "normal",
-    "lighten": "lighten",
-    "screen": "screen",
-    "color dodge": "color-dodge",
-    "linear dodge": "linear-dodge",
-    "lighter color": "normal",
-    "overlay": "overlay",
-    "soft light": "soft-light",
-    "hard light": "hard-light",
-    "vivid light": "vivid-light",
-    "linear light": "linear-light",
-    "pin light": "pin-light",
-    "hard mix": "hard-mix",
-    "difference": "difference",
-    "exclusion": "exclusion",
-    "subtract": "subtract",
-    "divide": "divide",
-    "hue": "normal",
-    "saturation": "saturation",
-    "color": "color",
-    "luminosity": "luminosity"
-}
+    [key in PSDBlendMode]: PixiBlendMode;
+};
 
 const blendMode_map: blendMode_map_type = {
     "pass through": "inherit",
-    "normal": "normal",
-    "dissolve": "normal",
-    "darken": "darken",
-    "multiply": "multiply",
+    normal: "normal",
+    dissolve: "normal",
+    darken: "darken",
+    multiply: "multiply",
     "color burn": "color-burn",
     "linear burn": "linear-burn",
     "darker color": "normal",
-    "lighten": "lighten",
-    "screen": "screen",
+    lighten: "lighten",
+    screen: "screen",
     "color dodge": "color-dodge",
     "linear dodge": "linear-dodge",
     "lighter color": "normal",
-    "overlay": "overlay",
+    overlay: "overlay",
     "soft light": "soft-light",
     "hard light": "hard-light",
     "vivid light": "vivid-light",
     "linear light": "linear-light",
     "pin light": "pin-light",
     "hard mix": "hard-mix",
-    "difference": "difference",
-    "exclusion": "exclusion",
-    "subtract": "subtract",
-    "divide": "divide",
-    "hue": "normal",
-    "saturation": "saturation",
-    "color": "color",
-    "luminosity": "luminosity"
-}
+    difference: "difference",
+    exclusion: "exclusion",
+    subtract: "subtract",
+    divide: "divide",
+    hue: "normal",
+    saturation: "saturation",
+    color: "color",
+    luminosity: "luminosity",
+};
 
 export class Observable<T> {
     private _value: T;
@@ -101,17 +84,13 @@ export class Point {
     _y: Observable<number>;
     onChange?: (input: Point) => void;
 
-    constructor(
-        x: number = 0,
-        y: number = 0,
-        onChange?: (input: Point) => void,
-    ) {
+    constructor(x: number = 0, y: number = 0, onChange?: (input: Point) => void) {
         this._x = new Observable(0);
         this._y = new Observable(0);
         this.onChange = onChange;
 
-        this._x.onChange = () => this.updatePoint()
-        this._y.onChange = () => this.updatePoint()
+        this._x.onChange = () => this.updatePoint();
+        this._y.onChange = () => this.updatePoint();
 
         this.xy = [x, y];
     }
@@ -147,275 +126,246 @@ export class Point {
     }
 }
 
-class NodeGeometryData {
-    vertices: Float32Array;
-    uvs: Float32Array;
-    indices: Uint32Array;
-    geometry: MeshGeometry;
+export class Vessel {
+    private readonly original: Psd | Layer;
+    display: Container;
+    _parent: Vessel | null = null;
+    _mask: Vessel | null = null;
+    _clipping: boolean = false;
 
-    constructor(geometry: MeshGeometry) {
-        this.vertices = new Float32Array([]);
-        this.uvs = new Float32Array([]);
-        this.indices = new Uint32Array([]);
-        this.geometry = geometry;
-    }
-
-    add_vertex(x: number, y: number) {
-        this.vertices.set([x, y], this.vertices.length);
-        this.indices.set([this.vertices.length / 2 - 1], this.indices.length);
-
-        this.update()
-    }
-
-    remove_vertex(index: number) {
-        const verticesArray = Array.from(this.vertices);
-        verticesArray.splice(index * 2, 2);
-        this.vertices = new Float32Array(verticesArray);
-
-        const indicesArray = Array.from(this.indices);
-        indicesArray.splice(index, 1);
-        this.indices = new Uint32Array(indicesArray);
-
-        this.update()
-    }
-
-    edit_vertex(index: number, x: number, y: number) {
-        this.vertices[index * 2] = x;
-        this.vertices[index * 2 + 1] = y;
-
-        this.update()
-    }
-
-    update() {
-        this.geometry.positions = this.vertices;
-        this.geometry.uvs = this.uvs;
-        this.geometry.indices = this.indices;
-    }
-}
-
-export class Node {
-    original: Psd | Layer;
-    display: Mesh | Container;
-    private _type: "PSD" | "Group" | "Layer";
-    private _name: string = "";
-    geometry?: MeshGeometry;
-    geometryData?: NodeGeometryData;
-    children: Node[] = [];
-    position: Point;
-    private _parent?: Node;
-
-    constructor(node: Psd | Layer, parent?: Node) {
+    constructor(node: Psd | Layer | LayerMaskData, parent?: Vessel) {
         this.original = node;
-        this.name = node.name ?? "Unnamed Node";
+        this.display = new Container();
 
+        if (parent) {
+            this.parent = parent;
+        }
 
-        if (node.children?.length) {
-            this._type = "Group";
-
-            this.display = new Container();
-
-            node.children.forEach((child) => {
-                const child_node = new Node(child, this)
-                this.children.push(child_node)
-                this.display.addChild(child_node.display)
-            });
+        if ("top" in node || "left" in node) {
+            this.position = { x: node.top ?? 0, y: node.left ?? 0 };
         } else {
-            this._type = "Layer";
-            if (node.text) {
-                this.display = new Text({
-                    text: node.text.text,
-                    style: {
-                        fill: node.text.style?.fillColor as { "r": number, "g": number, "b": number, "a": number } | undefined,
-                        fontFamily: node.text.style?.font?.name,
-                        fontSize: node.text.style?.fontSize,
-                        stroke: {
-                            color: node.text.style?.strokeColor as { "r": number, "g": number, "b": number, "a": number } | undefined,
-                        }
-                    }
-                })
-            } else {
-                const geometry = this.geometry = new MeshGeometry({
-
-                })
-
-                this.geometryData = new NodeGeometryData(geometry);
-
-                this.display = new Mesh({
-                    geometry
-                });
-
-                this.init_texture();
-            }
+            this.position = { x: 0, y: 0 };
         }
-
-        const top = 'top' in node ? node.top : 0;
-        const left = 'left' in node ? node.left : 0;
-
-        this.position = new Point(
-            top,
-            left,
-            (point) => {
-                this.display.position.x = point.x;
-                this.display.position.y = point.y;
-            }
-        );
-
-        const clipping = 'clipping' in node ? node.clipping : null;
-
-        if (clipping) {
-            if (parent?.children[parent.children.length - 1]?.display) {
-                this.display.mask = parent?.children[parent.children.length - 1]?.display;
-            }
+        if ("fillOpacity" in node) {
+            this.opacity = node.fillOpacity ?? 1;
         }
-
-        const blendMode = 'blendMode' in node ? node.blendMode : null;
-
-        if (blendMode) {
-            this.display.blendMode = blendMode_map[blendMode];
+        if ("hidden" in node) {
+            this.visible = !node.hidden;
         }
-
-        this._parent = parent;
-    }
-
-    async init_texture() {
-        if (this.display instanceof Mesh && this.original.imageData) {
-            const value = this.original.imageData.data;
-            const texture = Texture.from({
-                "resource": value.buffer,
-                "height": this.original.imageData.height,
-                "width": this.original.imageData.width,
-            })
-            this.display.texture = texture;
+        if ("blendMode" in node) {
+            this.blendMode = node.blendMode ?? "normal";
+        }
+        if ("referencePoint" in node) {
+            this.pivot = node.referencePoint ?? { x: 0, y: 0 };
+        }
+        if ("mask" in node && node.mask) {
+            this.mask = new Contents(node.mask)
+        }
+        if ("clipping" in node && node.clipping) {
+            this.clipping = node.clipping;
         }
     }
 
-    async show_vertex() {
-        if (this.display instanceof Mesh) {
-            const geometry = this.display.geometry as MeshGeometry;
-            const vertices = geometry.getBuffer("aVertexPosition").data as Float32Array;
-            const indices = geometry.getIndex().data as Uint16Array;
-            const vertex = new Container();
-
-            const g = new Graphics();
-
-            g.x = this.display.x;
-            g.y = this.display.y;
-
-            g.clear();
-            const x = vertices[0];
-            const y = vertices[1];
-            g.moveTo(x, y);
-
-            for (let i = 0; i < vertices.length; i += 2) {
-                g.lineTo(vertices[i], vertices[i + 1]);
-                g.stroke({ width: 2, color: 0xffc2c2 });
+    get clipping(): boolean {
+        return this.clipping;
+    }
+    set clipping(value: boolean) {
+        if (this.parent && value) {
+            const now_index = this.parent.children.indexOf(this)
+            if (now_index !== -1 && now_index !== 0) {
+                this.mask = this.parent.children[now_index - 1];
             }
-
-            for (let i = 0; i < vertices.length; i += 2) {
-                g.circle(vertices[i], vertices[i + 1], 10);
-                g.fill({ color: 0xff0022 });
-                g.stroke({ width: 2, color: 0xffc2c2 });
-            }
-            this.display.addChild(vertex);
         }
+
     }
 
-    get name(): string {
-        return this._name;
-    }
-    set name(x: string) {
-        this._name = x;
-        // this.display.label = x;
-        this.original.name = x;
+    get children(): (Vessel | Contents)[] {
+        if (this.original.children) {
+            return this.original.children.map(child => {
+                if (child.children) {
+                    return new Vessel(child, this);
+                } else {
+                    return new Contents(child);
+                }
+            });
+        }
+        return [];
     }
 
-    set knockout(x: boolean) {
-        console.warn("Knockout is not supported by PixiJS. This property will be ignored.");
-        this.original.knockout = x;
+    async destroy(option: DestroyOptions) {
+        this.display.destroy(option);
     }
-    get knockout(): boolean {
-        return this.original.knockout ?? false;
+
+    set mask(value: Vessel | null) {
+        this._mask = value;
+        this.display.mask = value?.display ?? null;
+    }
+    get mask(): Vessel | null {
+        return this._mask;
+    }
+
+    set blendMode(value: PSDBlendMode | PixiBlendMode) {
+        let result: PixiBlendMode
+        if (value in blendMode_map) {
+            result = blendMode_map[value as PSDBlendMode];
+        } else {
+            result = value as PixiBlendMode;
+        }
+
+        this.display.blendMode = result;
+    }
+    get blendMode(): PixiBlendMode {
+        return this.display.blendMode;
+    }
+
+    get position(): ObservablePoint {
+        return this.display.position;
+    }
+    set position(value: PointData) {
+        this.display.position = value;
+    }
+
+    get pivot(): ObservablePoint {
+        return this.display.pivot;
+    }
+    set pivot(value: PointData) {
+        this.display.pivot = value;
     }
 
     get opacity(): number {
         return this.display.alpha;
     }
-    set opacity(x: number) {
-        this.display.alpha = x;
-        this.original.fillOpacity = x;
+    set opacity(value: number) {
+        this.display.alpha = value;
     }
+
     get zIndex(): number {
         return this.display.zIndex;
     }
-    set zIndex(x: number) {
-        this.display.zIndex = x;
+    set zIndex(value: number) {
+        this.display.zIndex = value;
     }
-    get parent(): Node | null {
-        return this._parent ?? null;
+
+    get parent(): Vessel | null {
+        return this.parent ?? null;
     }
-    set parent(parent: Node) {
-        this.display.parent = parent.display;
-        this._parent = parent;
+    set parent(value: Vessel | null) {
+        this.parent = value;
+        if (value) {
+            this.display.parent = value.display;
+        }
     }
+
     get visible(): boolean {
         return this.display.visible;
     }
-    set visible(x: boolean) {
-        this.display.visible = x;
-        if ("hidden" in this.original) {
-            this.original.hidden = !x;
-        } else {
-            this.original.layerMaskAsGlobalMask
-        }
+    set visible(value: boolean) {
+        this.display.visible = value;
     }
+
     get type(): "PSD" | "Group" | "Layer" {
-        return this._type;
-    }
-
-    set type(x: "Group" | "Layer") {
-        this._type = x;
-        this.children = [];
-        if (x === "Group") {
-            this.display = new Container();
-
-            this.original.children?.forEach((child) => {
-                const child_node = new Node(child, this)
-                this.children.push(child_node)
-                this.display.addChild(child_node.display)
-            });
-        } else {
-            const geometry = this.geometry = new MeshGeometry({
-
-            })
-
-            this.display = new Mesh({
-                geometry
-            });
-
-            if (this._parent) {
-                this._parent.display.addChild(this.display);
-            }
-
-            this.init_texture();
-        }
+        return "Group"
     }
 }
 
-export class PixiPSD<T extends Node = Node> extends Node {
-    override children!: T[];
+export class GeometryData {
+    geometry: MeshGeometry;
+    positions: PointData[];
+    uvs: { u: number, v: number }[];
+    indice: number[];
+
+    constructor(geometry: MeshGeometry) {
+        this.geometry = geometry;
+        this.positions = [];
+        this.uvs = [];
+        this.indice = [];
+    }
+
+    addVertex(x: number, y: number, u: number, v: number): number {
+        this.positions.push({ x, y });
+        this.uvs.push({ u, v });
+        this.updateArrays();
+        return this.positions.length - 1;
+    }
+
+    addTriangle(index0: number, index1: number, index2: number) {
+        this.indice.push(index0, index1, index2);
+    }
+
+    setVertex(index: number, x: number, y: number): void {
+        if (index >= 0 && index < this.positions.length) {
+            this.positions[index].x = x;
+            this.positions[index].y = y;
+        }
+    }
+
+    setUV(index: number, u: number, v: number): void {
+        if (index >= 0 && index < this.uvs.length) {
+            this.uvs[index].u = u;
+            this.uvs[index].v = v;
+            this.updateArrays();
+        }
+    }
+
+    removeVertex(index: number): void {
+        if (index >= 0 && index < this.positions.length) {
+            this.positions.splice(index, 1);
+            this.uvs.splice(index, 1);
+
+            // インデックス配列を更新
+            this.indice = this.indice.filter(idx => idx !== index).map(idx => idx > index ? idx - 1 : idx);
+
+            this.updateArrays();
+        }
+    }
+
+    updateArrays() {
+        this.geometry.positions = new Float32Array(this.positions.flatMap(v => [v.x, v.y]));
+        this.geometry.uvs = new Float32Array(this.uvs.flatMap(uv => [uv.u, uv.v]));
+        this.geometry.indices = new Uint32Array(this.indice);
+    }
+}
+
+export class Contents extends Vessel {
+    display: Mesh;
+    geometoryData?: GeometryData;
+    constructor(node: Psd | Layer | LayerMaskData, parent?: Vessel) {
+        super(node, parent);
+        const geometry = new MeshGeometry({});
+
+        this.geometoryData = new GeometryData(geometry);
+
+        if (!node.imageData) {
+            throw new Error("No Image");
+        }
+        const value = node.imageData.data;
+        const texture = Texture.from({
+            resource: value.buffer,
+            height: node.imageData.height,
+            width: node.imageData.width,
+        });
+
+        this.display = new Mesh({
+            geometry,
+            texture
+        });
+    }
+}
+
+export class PixiPSD extends Vessel {
     override get type(): "PSD" {
         return "PSD";
     }
 
     constructor(buffer: ArrayBuffer) {
         const original = readPsd(buffer);
-        super(original)
+        super(original);
     }
 
     static async from(url: string): Promise<PixiPSD> {
-        const response = await fetch(url)
+        const response = await fetch(url);
         if (response.body) {
-            const result = await response.body.getReader().read()
+            const result = await response.body.getReader().read();
             if (result.value) {
                 return new PixiPSD(result.value.buffer);
             }

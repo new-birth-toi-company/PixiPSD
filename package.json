@@ -1,8 +1,8 @@
 {
   "name": "pixipsd",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "PSD Loader for PixiJS",
-  "main": "index.js",
+  "main": "index.ts",
   "scripts": {
     "test": "cross-env TS_NODE_COMPILER_OPTIONS=\"{ \\\"module\\\":\\\"commonjs\\\"}\" && nyc mocha -r ts-node/register \"tests/*.ts\"",
     "coverage": "nyc --reporter=lcovonly npm run test"
